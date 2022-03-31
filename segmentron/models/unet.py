@@ -3,18 +3,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .segbase import SegBaseModel
-from .model_zoo import MODEL_REGISTRY
 from ..modules import _FCNHead
-from ..config import cfg
 
 __all__ = ['UNet']
 
 
-@MODEL_REGISTRY.register()
 class UNet(SegBaseModel):
 
-    def __init__(self):
-        super(UNet, self).__init__(need_backbone=False)
+    def __init__(self, nclass):
+        self.nclass = nclass
+        super(UNet, self).__init__(nclass=self.nclass, need_backbone=False)
         self.inc = DoubleConv(3, 64)
         self.down1 = Down(64, 128)
         self.down2 = Down(128, 256)
@@ -22,7 +20,7 @@ class UNet(SegBaseModel):
         self.down4 = Down(512, 512)
         self.head = _UNetHead(self.nclass)
 
-        self.__setattr__('decoder', ['head', 'auxlayer'] if self.aux else ['head'])
+        self.__setattr__('decoder', ['head'])
 
     def forward(self, x):
         size = x.size()[2:]
@@ -32,12 +30,10 @@ class UNet(SegBaseModel):
         x4 = self.down3(x3)
         x5 = self.down4(x4)
 
-        outputs = list()
         x = self.head(x1, x2, x3, x4, x5)
         x = F.interpolate(x, size, mode='bilinear', align_corners=True)
 
-        outputs.append(x)
-        return tuple(outputs)
+        return x
 
 
 class _UNetHead(nn.Module):

@@ -3,18 +3,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .segbase import SegBaseModel
-from .model_zoo import MODEL_REGISTRY
 from ..modules import _ConvBNReLU, SeparableConv2d, _ASPP, _FCNHead
-from ..config import cfg
 
 
 __all__ = ["FPENet"]
 
 
-@MODEL_REGISTRY.register()
 class FPENet(SegBaseModel):
-    def __init__(self):
-        super(FPENet, self).__init__(need_backbone=False)
+    def __init__(self, nclass):
+        self.nclass = nclass
+        super(FPENet, self).__init__(nclass=self.nclass, need_backbone=False)
         width = 16
         scales = 4
         se = False
@@ -113,9 +111,8 @@ class FPENet(SegBaseModel):
 
         # Bilinear interpolation x2
         output = F.interpolate(output,scale_factor=2, mode = 'bilinear', align_corners=True)
-        outputs = list()
-        outputs.append(output)
-        return outputs
+
+        return output
 
 
 def conv3x3(in_planes, out_planes, stride=1, padding=1, dilation=1, groups=1, bias=False):

@@ -3,54 +3,51 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .segbase import SegBaseModel
-from .model_zoo import MODEL_REGISTRY
 from ..modules import _ConvBNReLU, SeparableConv2d, _ASPP, _FCNHead
-from ..config import cfg
 
 __all__ = ['DeepLabV3Plus']
 
 
-@MODEL_REGISTRY.register(name='DeepLabV3_Plus')
 class DeepLabV3Plus(SegBaseModel):
     r"""DeepLabV3Plus
     Reference:
         Chen, Liang-Chieh, et al. "Encoder-Decoder with Atrous Separable Convolution for Semantic
         Image Segmentation."
     """
-    def __init__(self):
-        super(DeepLabV3Plus, self).__init__()
-        if self.backbone.startswith('mobilenet'):
+    def __init__(self, nclass, backbone_name=''):
+        self.backbone_name = backbone_name
+        self.nclass = nclass
+        if(backbone_name!=''):
+            super(DeepLabV3Plus, self).__init__(backbone_name=self.backbone_name, nclass=self.nclass, need_backbone=True)
+        else:
+            super(DeepLabV3Plus, self).__init__(nclass=self.nclass, need_backbone=False)
+        if self.backbone_name.startswith('mobilenet'):
             c1_channels = 24
             c4_channels = 320
+        elif self.backbone_name in ['resnet34', 'resnet18'] :
+            c1_channels = 64
+            c4_channels = 512
         else:
             c1_channels = 256
             c4_channels = 2048
         self.head = _DeepLabHead(self.nclass, c1_channels=c1_channels, c4_channels=c4_channels)
-        if self.aux:
-            self.auxlayer = _FCNHead(728, self.nclass)
-        self.__setattr__('decoder', ['head', 'auxlayer'] if self.aux else ['head'])
+        self.__setattr__('decoder', ['head'])
 
     def forward(self, x):
         size = x.size()[2:]
-        c1, _, c3, c4 = self.encoder(x)
+        c1, _, c3, c4 = self.backbone(x)
 
-        outputs = list()
         x = self.head(c4, c1)
         x = F.interpolate(x, size, mode='bilinear', align_corners=True)
 
-        outputs.append(x)
-        if self.aux:
-            auxout = self.auxlayer(c3)
-            auxout = F.interpolate(auxout, size, mode='bilinear', align_corners=True)
-            outputs.append(auxout)
-        return tuple(outputs)
+        return x
 
 
 class _DeepLabHead(nn.Module):
-    def __init__(self, nclass, c1_channels=256, c4_channels=2048, norm_layer=nn.BatchNorm2d):
+    def __init__(self, nclass, c1_channels=256, c4_channels=2048, norm_layer=nn.BatchNorm2d, use_aspp=True, use_decoder=True):
         super(_DeepLabHead, self).__init__()
-        self.use_aspp = cfg.MODEL.DEEPLABV3_PLUS.USE_ASPP
-        self.use_decoder = cfg.MODEL.DEEPLABV3_PLUS.ENABLE_DECODER
+        self.use_aspp = use_aspp
+        self.use_decoder = use_decoder
         last_channels = c4_channels
         if self.use_aspp:
             self.aspp = _ASPP(c4_channels, 256)

@@ -3,13 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .segbase import SegBaseModel
-from .model_zoo import MODEL_REGISTRY
 from ..modules import _ConvBNReLU
 
 __all__ = ['LEDNet']
 
 
-@MODEL_REGISTRY.register()
 class LEDNet(SegBaseModel):
     r"""LEDNet
     Reference:
@@ -17,8 +15,10 @@ class LEDNet(SegBaseModel):
         arXiv preprint arXiv:1905.02423 (2019).
     """
 
-    def __init__(self):
-        super(LEDNet, self).__init__(need_backbone=False)
+    def __init__(self, nclass, norm_layer=nn.BatchNorm2d):
+        self.nclass = nclass
+        self.norm_layer = norm_layer
+        super(LEDNet, self).__init__(nclass=self.nclass, need_backbone=False)
         self.encoder = nn.Sequential(
             Downsampling(3, 32),
             SSnbt(32, norm_layer=self.norm_layer),
@@ -45,11 +45,10 @@ class LEDNet(SegBaseModel):
         size = x.size()[2:]
         x = self.encoder(x)
         x = self.head(x)
-        outputs = list()
-        x = F.interpolate(x, size, mode='bilinear', align_corners=True)
-        outputs.append(x)
 
-        return tuple(outputs)
+        x = F.interpolate(x, size, mode='bilinear', align_corners=True)
+
+        return x
 
 
 class Downsampling(nn.Module):

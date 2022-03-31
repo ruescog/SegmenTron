@@ -4,14 +4,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .segbase import SegBaseModel
-from .model_zoo import MODEL_REGISTRY
 from ..modules import _ConvBNPReLU, _BNPReLU
-from ..config import cfg
 
 __all__ = ['CGNet']
 
 
-@MODEL_REGISTRY.register()
 class CGNet(SegBaseModel):
     r"""CGNet
     Reference:
@@ -19,11 +16,10 @@ class CGNet(SegBaseModel):
         arXiv preprint arXiv:1811.08201 (2018).
     """
 
-    def __init__(self):
-        super(CGNet, self).__init__(need_backbone=False)
+    def __init__(self, nclass, stage2_block_num=3, stage3_block_num=21):
+        self.nclass = nclass
+        super(CGNet, self).__init__(nclass=self.nclass, need_backbone=False)
 
-        stage2_block_num = cfg.MODEL.CGNET.STAGE2_BLOCK_NUM
-        stage3_block_num = cfg.MODEL.CGNET.STAGE3_BLOCK_NUM
         # stage 1
         self.stage1_0 = _ConvBNPReLU(3, 32, 3, 2, 1, norm_layer=self.norm_layer)
         self.stage1_1 = _ConvBNPReLU(32, 32, 3, 1, 1, norm_layer=self.norm_layer)
@@ -86,11 +82,10 @@ class CGNet(SegBaseModel):
                 out2 = layer(out2)
         out2_cat = self.bn_prelu3(torch.cat([out2_0, out2], dim=1))
 
-        outputs = []
         out = self.head(out2_cat)
         out = F.interpolate(out, size, mode='bilinear', align_corners=True)
-        outputs.append(out)
-        return tuple(outputs)
+
+        return out
 
 
 class _ChannelWiseConv(nn.Module):

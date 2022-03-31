@@ -4,52 +4,41 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .segbase import SegBaseModel
-from .model_zoo import MODEL_REGISTRY
 from ..modules import _ConvBNReLU
 
 __all__ = ['BiSeNet']
 
 
-@MODEL_REGISTRY.register()
 class BiSeNet(SegBaseModel):
     r"""BiSeNet
     Reference:
         Changqian Yu, et al. "BiSeNet: Bilateral Segmentation Network for Real-time Semantic Segmentation"
         arXiv preprint arXiv:1808.00897 (2018).
     """
-    def __init__(self):
-        super(BiSeNet, self).__init__()
+    def __init__(self, nclass, backbone_name=''):
+        self.backbone_name = backbone_name
+        self.nclass = nclass
+        if(backbone_name!=''):
+            super(BiSeNet, self).__init__(backbone_name=self.backbone_name,nclass=self.nclass, need_backbone=True)
+        else:
+            super(BiSeNet, self).__init__(nclass=self.nclass, need_backbone=False)
         self.spatial_path = SpatialPath(3, 128, norm_layer=self.norm_layer)
         self.context_path = ContextPath(norm_layer=self.norm_layer)
         self.ffm = FeatureFusion(256, 256, 4)
         self.head = _BiSeHead(256, 64, self.nclass)
-        if self.aux:
-            self.auxlayer1 = _BiSeHead(128, 256, self.nclass)
-            self.auxlayer2 = _BiSeHead(128, 256, self.nclass)
 
-        self.__setattr__('decoder',
-                         ['spatial_path', 'context_path', 'ffm', 'head', 'auxlayer1', 'auxlayer2'] if self.aux else [
-                             'spatial_path', 'context_path', 'ffm', 'head'])
+        self.__setattr__('decoder', ['spatial_path', 'context_path', 'ffm', 'head'])
 
     def forward(self, x):
         size = x.size()[2:]
         spatial_out = self.spatial_path(x)
-        c1, c2, c3, c4 = self.encoder(x)
+        c1, c2, c3, c4 = self.backbone(x)
         context_out = self.context_path(c1, c2, c3, c4)
         fusion_out = self.ffm(spatial_out, context_out[-1])
-        outputs = []
         x = self.head(fusion_out)
         x = F.interpolate(x, size, mode='bilinear', align_corners=True)
-        outputs.append(x)
 
-        if self.aux:
-            auxout1 = self.auxlayer1(context_out[0])
-            auxout1 = F.interpolate(auxout1, size, mode='bilinear', align_corners=True)
-            outputs.append(auxout1)
-            auxout2 = self.auxlayer2(context_out[1])
-            auxout2 = F.interpolate(auxout2, size, mode='bilinear', align_corners=True)
-            outputs.append(auxout2)
-        return tuple(outputs)
+        return x
 
 
 class _BiSeHead(nn.Module):
@@ -137,20 +126,6 @@ class ContextPath(nn.Module):
         )
 
     def forward(self, c1, c2, c3, c4):
-        # x = self.conv1(x)
-        # x = self.bn1(x)
-        # x = self.relu(x)
-        # x = self.maxpool(x)
-        # x = self.layer1(x)
-        #
-        # context_blocks = []
-        # context_blocks.append(x)
-        # x = self.layer2(x)
-        # context_blocks.append(x)
-        # c3 = self.layer3(x)
-        # context_blocks.append(c3)
-        # c4 = self.layer4(c3)
-        # context_blocks.append(c4)
         context_blocks = [c4, c3, c2, c1]
 
         global_context = self.global_context(c4)

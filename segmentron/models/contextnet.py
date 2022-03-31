@@ -3,28 +3,19 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .segbase import SegBaseModel
-from .model_zoo import MODEL_REGISTRY
 
 __all__ = ["ContextNet"]
 
 
-@MODEL_REGISTRY.register()
 class ContextNet(SegBaseModel):
-    def __init__(self):
-        super(ContextNet, self).__init__(need_backbone=False)
+    def __init__(self, nclass):
+        self.nclass = nclass
+        super(ContextNet, self).__init__(nclass=self.nclass, need_backbone=False)
         self.spatial_detail = Shallow_net(32, 64, 128)
         self.context_feature_extractor = Deep_net(32, [32, 32, 48, 64, 96, 128],
                                                   [1, 6, 6, 6, 6, 6], [1, 1, 3, 3, 2, 2])
         self.feature_fusion = FeatureFusionModule(128, 128, 128)
         self.classifier = Classifer(128, self.nclass)
-        if self.aux:
-            self.auxlayer = nn.Sequential(
-                nn.Conv2d(128, 32, 3, padding=1, bias=False),
-                nn.BatchNorm2d(32),
-                nn.ReLU(True),
-                nn.Dropout(0.1),
-                nn.Conv2d(32, self.nclass, 1)
-            )
 
     def forward(self, x):
         size = x.size()[2:]
@@ -39,16 +30,9 @@ class ContextNet(SegBaseModel):
 
         x = self.classifier(x)
 
-        outputs = []
         x = F.interpolate(x, size, mode='bilinear', align_corners=True)
 
-        outputs.append(x)
-        if self.aux:
-            auxout = self.auxlayer(higher_res_features)
-            auxout = F.interpolate(auxout, size, mode='bilinear', align_corners=True)
-            outputs.append(auxout)
-
-        return outputs
+        return x
 
 
 class Custom_Conv(nn.Module):

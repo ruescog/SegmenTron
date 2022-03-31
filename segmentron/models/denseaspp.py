@@ -3,42 +3,31 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .segbase import SegBaseModel
-from .model_zoo import MODEL_REGISTRY
 from .fcn import _FCNHead
 
 __all__ = ['DenseASPP']
 
 
-@MODEL_REGISTRY.register()
 class DenseASPP(SegBaseModel):
-    def __init__(self):
-        super(DenseASPP, self).__init__()
+    def __init__(self, nclass, backbone_name="resnet101"):
+        self.backbone_name = backbone_name
+        self.nclass = nclass
+        super(DenseASPP, self).__init__(backbone_name=self.backbone_name, nclass=self.nclass, need_backbone=True)
 
-        in_channels = self.encoder.last_inp_channels
+        in_channels = self.backbone.last_inp_channels
 
         self.head = _DenseASPPHead(in_channels, self.nclass, norm_layer=self.norm_layer)
 
-        if self.aux:
-            self.auxlayer = _FCNHead(in_channels, self.nclass)
-
-        self.__setattr__('decoder', ['head', 'auxlayer'] if self.aux else ['head'])
+        self.__setattr__('decoder', ['head'])
 
     def forward(self, x):
         size = x.size()[2:]
-        _, _, c3, c4 = self.encoder(x)
-        # TODO add densenet as backbone
-        # if self.dilate_scale > 8:
-        #     features = F.interpolate(c4, scale_factor=2, mode='bilinear', align_corners=True)
-        outputs = []
+        _, _, c3, c4 = self.backbone(x)
+
         x = self.head(c4)
         x = F.interpolate(x, size, mode='bilinear', align_corners=True)
-        outputs.append(x)
 
-        if self.aux:
-            auxout = self.auxlayer(c3)
-            auxout = F.interpolate(auxout, size, mode='bilinear', align_corners=True)
-            outputs.append(auxout)
-        return tuple(outputs)
+        return x
 
 
 class _DenseASPPHead(nn.Module):

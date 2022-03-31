@@ -3,14 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .segbase import SegBaseModel
-from .model_zoo import MODEL_REGISTRY
 from ..modules import _FCNHead
-from ..config import cfg
 
 __all__ = ['OCNet']
 
 
-@MODEL_REGISTRY.register()
 class OCNet(SegBaseModel):
     r"""OCNet
     Reference:
@@ -18,28 +15,24 @@ class OCNet(SegBaseModel):
         arXiv preprint arXiv:1809.00916 (2018).
     """
 
-    def __init__(self):
-        super(OCNet, self).__init__()
-        oc_arch = cfg.MODEL.OCNet.OC_ARCH
-        self.head = _OCHead(self.nclass, oc_arch, norm_layer=self.norm_layer)
-        if self.aux:
-            self.auxlayer = _FCNHead(1024, self.nclass, norm_layer=self.norm_layer)
+    def __init__(self, nclass, backbone_name="resnet50", norm_layer=nn.BatchNorm2d, oc_arch='base'):
+        self.backbone_name = backbone_name
+        self.norm_layer = norm_layer
+        self.nclass = nclass
+        super(OCNet, self).__init__(backbone_name=self.backbone_name, nclass=self.nclass, need_backbone=True)
 
-        self.__setattr__('decoder', ['head', 'auxlayer'] if self.aux else ['head'])
+        self.head = _OCHead(self.nclass, oc_arch, norm_layer=self.norm_layer)
+
+        self.__setattr__('decoder', ['head'])
 
     def forward(self, x):
         size = x.size()[2:]
         _, _, c3, c4 = self.base_forward(x)
-        outputs = []
+
         x = self.head(c4)
         x = F.interpolate(x, size, mode='bilinear', align_corners=True)
-        outputs.append(x)
 
-        if self.aux:
-            auxout = self.auxlayer(c3)
-            auxout = F.interpolate(auxout, size, mode='bilinear', align_corners=True)
-            outputs.append(auxout)
-        return tuple(outputs)
+        return x
 
 
 class _OCHead(nn.Module):
